@@ -15,7 +15,7 @@ export const hace = iso => {
 };
 export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 export const esMovil = () => matchMedia('(max-width: 899px)').matches;
-export const iniciales = (n = '') => n.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || 'P';
+export const iniciales = n => String(n || '').trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || 'P';
 
 const P = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 export const I = {

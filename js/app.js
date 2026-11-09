@@ -150,7 +150,9 @@ function renderOnboarding(paso) {
   if (paso === 1) borrador = {
     nombre: S.perfil?.nombre || '', silueta: 'masculina', altura: 170, contextura: 'medio',
     piel: TONOS_PIEL[2], subtono: 'neutro', estilo: ['casual'], ciudad: CONFIG.CIUDAD_DEFECTO,
-    lavanderia_auto: true, ejemplo: S.prendas.length === 0, ...S.perfil,
+    lavanderia_auto: true, ejemplo: S.prendas.length === 0,
+    // Supabase crea el perfil con campos vacíos (null): solo se usan los que tienen valor
+    ...Object.fromEntries(Object.entries(S.perfil || {}).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length))),
   };
   const b = borrador;
   const pasos = ['Tu silueta', 'Tu piel', 'Tu día a día'];

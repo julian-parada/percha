@@ -69,7 +69,8 @@ export const OCASIONES = {
 
 // ─── Color ──────────────────────────────────────────────────
 export function hexToRgb(hex) {
-  const h = hex.replace('#', '');
+  if (typeof hex !== 'string' || !/^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(hex.trim())) hex = '#777777';
+  const h = hex.trim().replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
@@ -303,7 +304,9 @@ export function imagenDe(prenda) {
 // ─── Maniquí ────────────────────────────────────────────────
 export const TONOS_PIEL = ['#F3D5BF', '#E4B894', '#C98E66', '#A86F4C', '#7E4E33', '#563624'];
 
-export function maniquiSVG({ piel = '#C98E66', silueta = 'masculina' } = {}) {
+export function maniquiSVG({ piel, silueta } = {}) {
+  piel = piel || TONOS_PIEL[2];
+  silueta = silueta || 'masculina';
   const borde = shade(piel, -0.14);
   const fem = silueta === 'femenina';
   const torso = fem
