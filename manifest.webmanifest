@@ -1,0 +1,12 @@
+{
+  "name": "Percha · tu armario virtual",
+  "short_name": "Percha",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F1F2EC",
+  "theme_color": "#1F3D35",
+  "lang": "es",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
