@@ -304,7 +304,8 @@ export function imagenDe(prenda) {
 // ─── Maniquí ────────────────────────────────────────────────
 export const TONOS_PIEL = ['#F3D5BF', '#E4B894', '#C98E66', '#A86F4C', '#7E4E33', '#563624'];
 
-export function maniquiSVG({ piel, silueta } = {}) {
+// sinPiernas: con pantalón largo puesto se esconden piernas y cadera, para que no se asomen entre las botas
+export function maniquiSVG({ piel, silueta, sinPiernas = false } = {}) {
   piel = piel || TONOS_PIEL[2];
   silueta = silueta || 'masculina';
   const borde = shade(piel, -0.14);
@@ -321,9 +322,9 @@ export function maniquiSVG({ piel, silueta } = {}) {
       <path d="${brazoR}" fill="none" stroke="${piel}" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${fem ? 73 : 71}" cy="306" r="11"/>
       <circle cx="${fem ? 227 : 229}" cy="306" r="11"/>
-      <path d="M128 300 L126 540" fill="none" stroke="${piel}" stroke-width="40" stroke-linecap="round"/>
+      ${sinPiernas ? '' : `<path d="M128 300 L126 540" fill="none" stroke="${piel}" stroke-width="40" stroke-linecap="round"/>
       <path d="M172 300 L174 540" fill="none" stroke="${piel}" stroke-width="40" stroke-linecap="round"/>
-      <path d="M104 288 L196 288 L194 330 L150 338 L106 330 Z"/>
+      <path d="M104 288 L196 288 L194 330 L150 338 L106 330 Z"/>`}
       <ellipse cx="124" cy="553" rx="22" ry="10"/>
       <ellipse cx="176" cy="553" rx="22" ry="10"/>
       <path d="${torso}"/>

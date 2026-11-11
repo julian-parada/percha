@@ -429,16 +429,21 @@ function itemHTML(p) {
 // ─── Maniquí ────────────────────────────────────────────────
 function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, ocultar = null } = {}) {
   const k = ESCALA[perfil.contextura] || 1;
+  const get = pid => (pid && typeof pid === 'object') ? pid : prenda(pid);
+  const pantalon = get(outfit.piernas);
+  // Pantalón largo: se esconden las piernas del maniquí y la foto se estira de la cintura a los tobillos
+  const largo = !!pantalon && pantalon.tipo !== 'short';
   const slots = Object.entries(outfit).map(([z, pid]) => {
-    const p = typeof pid === 'object' ? pid : prenda(pid);
+    const p = get(pid);
     if (!p || !ZONAS[z]) return '';
     const [x, y, w, h] = ZONAS[z].box;
     const a = p.ajuste || {};
+    const ajuste = z === 'piernas' ? (largo ? 'relleno' : 'arriba') : '';
     return `<div class="slot slot-${z} ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:${x / 3}%;top:${y / 6}%;width:${w / 3}%;height:${h / 6}%;z-index:${ZONAS[z].z}">
-      <img src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
+      <img class="${ajuste}" src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
   }).join('');
   return `<div class="maniqui ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
-    <div class="maniqui-figura" style="transform:scaleX(${k})">${maniquiSVG({ piel: perfil.piel, silueta: perfil.silueta })}<div class="slots">${slots}</div></div>
+    <div class="maniqui-figura" style="transform:scaleX(${k})">${maniquiSVG({ piel: perfil.piel, silueta: perfil.silueta, sinPiernas: largo })}<div class="slots">${slots}</div></div>
   </div>`;
 }
 

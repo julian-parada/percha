@@ -263,6 +263,8 @@ input[type=range] { width: 100%; accent-color: var(--laca); }
 .slot { position: absolute; }
 .slot img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; filter: drop-shadow(0 2px 2px rgba(20, 32, 28, .14)); }
 .slot.oculto { opacity: 0; }
+.slot img.relleno { object-fit: fill; }
+.slot img.arriba { object-position: top; }
 .slot.cae { animation: cae .5s cubic-bezier(.3, 1.45, .5, 1) both; }
 @keyframes cae { from { opacity: 0; transform: translateY(-12%) scale(1.07); } }
 .slot.desliza-der { animation: deslizaDer .32s cubic-bezier(.2, .9, .3, 1); }
