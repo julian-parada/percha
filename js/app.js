@@ -7,6 +7,7 @@ import {
 import { obtenerClima, CIUDADES } from './weather.js';
 import { recomendar, evaluarOutfit } from './recommender.js';
 import { quitarFondo, prepararImagen, cargarImagen } from './images.js';
+import { CONTROLES_FORMA, formaDe, formaLista, deformar, PADDING, iniciarFormas } from './forma.js';
 import { $, $$, esc, cop, hace, diasDesde, reduceMotion, esMovil, iniciales, I, toast, abrirModal, cerrarModal, confirmar } from './ui.js';
 
 // ─── Estado ─────────────────────────────────────────────────
@@ -437,17 +438,28 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
     const p = get(pid);
     if (!p || !ZONAS[z]) return '';
     const a = p.ajuste || {};
+    const escala = `scale(${(a.s || 1) * (a.sx || 1)}, ${(a.s || 1) * (a.sy || 1)})`;
+    // Forma por partes (cintura, bota, hombros…): la foto se deforma en un canvas con márgenes (PADDING)
+    const src = imagenDe(p);
+    const forma = formaDe(a, z);
+    const lista = forma ? formaLista(src, forma) : null;
+    const P = forma ? PADDING : 1;
+    const imgAttrs = forma && !lista
+      ? `src="${src}" data-src="${src}" data-forma='${esc(JSON.stringify(forma))}'`
+      : `src="${lista || src}"`;
+    const pendiente = forma && !lista ? 'deformando' : '';
     const real = cajaReal(z, p, perfil.altura);
     if (real) {
       // Tamaño real: la foto mide lo que dicen sus cm según tu altura; lo que pase del piso queda bajo los tenis
       const pct = real.alto / real.h * 100;
       return `<div class="slot slot-${z} real ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:0;top:${real.y / 6}%;width:100%;height:${real.h / 6}%;z-index:${ZONAS[z].z}">
-        <img src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="height:${pct}%;transform:translateX(-50%) translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
+        <img class="${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="height:${pct}%;transform:translateX(-50%) translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
     }
-    const [x, y, w, h] = ZONAS[z].box;
+    let [x, y, w, h] = ZONAS[z].box;
+    if (P !== 1) { x -= w * (P - 1) / 2; w *= P; }      // el canvas deformado trae márgenes: se ensancha la caja igual
     const ajuste = z === 'piernas' ? (largo ? 'relleno' : 'arriba') : '';
     return `<div class="slot slot-${z} ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:${x / 3}%;top:${y / 6}%;width:${w / 3}%;height:${h / 6}%;z-index:${ZONAS[z].z}">
-      <img class="${ajuste}" src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
+      <img class="${ajuste} ${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
   }).join('');
   return `<div class="maniqui ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
     <div class="maniqui-figura" style="transform:scaleX(${k})">${maniquiSVG({ piel: perfil.piel, silueta: perfil.silueta, sinPiernas: largo })}<div class="slots">${slots}</div></div>
@@ -455,6 +467,17 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
 }
 
 const FILAS = { cabeza: 8.5, torso: 29, capa: 43, piernas: 68, pies: 93 };
+
+// Ajuste de cada prenda en el maniquí (se guarda en prendas.ajuste)
+const AJUSTE_BASE = { x: 0, y: 0, s: 1, sx: 1, sy: 1, f0: 1, f1: 1, f2: 1, f3: 1 };
+const AJUSTES_GENERALES = [
+  { n: 'ax', k: 'x', label: 'Mover a los lados', min: -40, max: 40, step: 1 },
+  { n: 'ay', k: 'y', label: 'Subir o bajar', min: -40, max: 40, step: 1 },
+  { n: 'as', k: 's', label: 'Tamaño general', min: 0.5, max: 1.6, step: 0.01, pct: true },
+  { n: 'asx', k: 'sx', label: 'Ancho', min: 0.6, max: 1.4, step: 0.01, pct: true },
+  { n: 'asy', k: 'sy', label: 'Largo', min: 0.7, max: 1.3, step: 0.01, pct: true },
+];
+const verValor = (d, v) => d.pct ? Math.round(v * 100) + '%' : (v > 0 ? '+' : '') + Math.round(v);
 
 function renderProbador() {
   const el = $('#probador'); if (!el) return;
@@ -488,6 +511,7 @@ function renderProbador() {
     <div class="outfit-chips">
       ${piezas.map(([z, id]) => { const p = prenda(id); return `
         <span class="outfit-chip"><img src="${imagenDe(p)}" alt=""><span>${esc(p.nombre)}</span>
+          <button class="btn-icono" data-act="ajustar" data-id="${p.id}" aria-label="Ajustar ${esc(p.nombre)} en el maniquí" title="Ajustar en el maniquí">${I.editar}</button>
           <button class="btn-icono" data-act="quitar-zona" data-zona="${z}" aria-label="Quitar ${esc(p.nombre)}">${I.x}</button></span>`; }).join('')}
     </div>
     <div class="probador-acciones">
@@ -717,13 +741,13 @@ function abrirFicha(id) {
 // ═══════════════════════════════════════════════════════════
 //  AGREGAR / EDITAR PRENDA
 // ═══════════════════════════════════════════════════════════
-function abrirEditor(existente = null, compSugerido = null) {
+function abrirEditor(existente = null, compSugerido = null, { ajustar = false } = {}) {
   const tipoDef = existente?.tipo || Object.entries(TIPOS).find(([, t]) => t.comp === (compSugerido || S.comp))?.[0] || 'camiseta';
   const e = {
     nombre: '', tipo: tipoDef, color: '#3B5D8C', formalidad: 1, clima: 'todo', estado: 'disponible',
-    precio: '', notas: '', prestado_a: '', ajuste: { x: 0, y: 0, s: 1 }, ...existente,
+    precio: '', notas: '', prestado_a: '', ...existente,
   };
-  e.ajuste = { x: 0, y: 0, s: 1, ...(existente?.ajuste || {}) };
+  e.ajuste = { ...AJUSTE_BASE, ...(existente?.ajuste || {}) };
   e.medidas = { ...(existente?.medidas || {}) };
   let blob = null, fotoUrl = existente?.imagen_url || null, quitarF = true, procesando = false;
   let paleta = [];
@@ -749,15 +773,11 @@ function abrirEditor(existente = null, compSugerido = null) {
           </div>
           <label class="interruptor chico"><input type="checkbox" id="quitar-fondo" checked><span class="pista"></span><span>Quitar el fondo automáticamente</span></label>
           <p class="nota">Tip: foto de frente, con la prenda extendida sobre la cama o colgada en una pared lisa.</p>
-          <div class="ajuste">
-            <p class="ajuste-titulo">Cómo queda en el maniquí</p>
+          <div class="ajuste" id="ajuste">
+            <p class="ajuste-titulo">Ajustar en el maniquí</p>
             <div class="ajuste-cuerpo">
               <div class="ajuste-maniqui" id="ajuste-maniqui"></div>
-              <div class="ajuste-sliders">
-                <label><span>Mover a los lados</span><input type="range" min="-30" max="30" step="1" name="ax" value="${e.ajuste.x}"></label>
-                <label><span>Subir o bajar</span><input type="range" min="-30" max="30" step="1" name="ay" value="${e.ajuste.y}"></label>
-                <label><span>Tamaño</span><input type="range" min="0.6" max="1.5" step="0.02" name="as" value="${e.ajuste.s}"></label>
-                <button type="button" class="enlace" id="ajuste-reset">Restablecer</button>
+              <div class="ajuste-sliders" id="ajuste-sliders">
               </div>
             </div>
           </div>
@@ -804,9 +824,40 @@ function abrirEditor(existente = null, compSugerido = null) {
     $('#foto-zona', m).classList.toggle('con-foto', !!fotoUrl);
     $('#color-nombre', m).textContent = nombreColor(e.color);
     const z = TIPOS[e.tipo].zona;
-    $('#ajuste-maniqui', m).innerHTML = maniquiHTML({ [z]: actual }, { mini: true });
+    pintarManiqui(z, actual);
     $('#paleta', m).innerHTML = paleta.map(c => `<button type="button" class="paleta-color" style="background:${c}" data-c="${c}" aria-label="Usar ${nombreColor(c)}"></button>`).join('');
   };
+  // Vista previa con el outfit puesto; espera a que la forma esté lista para no parpadear
+  let turno = 0;
+  const pintarManiqui = async (z, actual) => {
+    const t = ++turno;
+    const fm = formaDe(actual.ajuste, z);
+    if (fm) { try { await deformar(imagenDe(actual), fm); } catch {} }
+    if (t !== turno) return;
+    const outfit = Object.fromEntries(Object.entries(S.outfit).filter(([oz, id]) => oz !== z && id !== actual.id && prenda(id)));
+    outfit[z] = actual;
+    $('#ajuste-maniqui', m).innerHTML = maniquiHTML(outfit, { mini: true });
+  };
+  let zonaAjustes = null;
+  const pintarAjustes = () => {
+    const z = TIPOS[e.tipo].zona;
+    if (z === zonaAjustes) return;
+    zonaAjustes = z;
+    const grupos = [
+      ['Posición', AJUSTES_GENERALES.slice(0, 2)],
+      ['Tamaño', AJUSTES_GENERALES.slice(2)],
+      ['Forma por partes', (CONTROLES_FORMA[z] || []).map(c => ({ n: 'a' + c.k, k: c.k, label: c.label, min: 0.5, max: 1.5, step: 0.01, pct: true }))],
+    ].filter(([, defs]) => defs.length);
+    $('#ajuste-sliders', m).innerHTML = grupos.map(([t, defs]) => `<div class="ajuste-grupo"><p>${t}</p>${defs.map(d => `
+      <label><span>${d.label}<output data-o="${d.n}">${verValor(d, e.ajuste[d.k] ?? AJUSTE_BASE[d.k])}</output></span>
+        <input type="range" name="${d.n}" min="${d.min}" max="${d.max}" step="${d.step}" value="${e.ajuste[d.k] ?? AJUSTE_BASE[d.k]}"></label>`).join('')}</div>`).join('')
+      + '<button type="button" class="enlace" id="ajuste-reset">Restablecer todo</button>';
+    $('#ajuste-reset', m).onclick = () => {
+      $$('#ajuste-sliders input[type=range]', m).forEach(i => { const d = defDe(i.name); i.value = AJUSTE_BASE[d.k]; });
+      sincronizar();
+    };
+  };
+  const defDe = n => AJUSTES_GENERALES.find(d => d.n === n) || { n, k: n.slice(1), pct: true };
   let zonaMedidas = null;
   const pintarMedidas = () => {
     const z = TIPOS[e.tipo].zona;
@@ -831,7 +882,14 @@ function abrirEditor(existente = null, compSugerido = null) {
       if (v) e.medidas[d.k] = d.texto ? v : Math.min(250, Math.max(1, +v));
     }
     e.tipo = f.get('tipo'); e.color = f.get('color'); e.formalidad = +f.get('formalidad'); e.clima = f.get('clima');
-    e.estado = f.get('estado'); e.ajuste = { x: +f.get('ax'), y: +f.get('ay'), s: +f.get('as') };
+    e.estado = f.get('estado');
+    pintarAjustes();
+    const nuevo = { ...AJUSTE_BASE };
+    $$('#ajuste-sliders input[type=range]', m).forEach(i => {
+      const d = defDe(i.name); nuevo[d.k] = +i.value;
+      const o = m.querySelector(`output[data-o="${i.name}"]`); if (o) o.textContent = verValor(d, +i.value);
+    });
+    e.ajuste = nuevo;
     $$('.segmento label', form).forEach(l => l.classList.toggle('activo', !!l.querySelector('input:checked')));
     $('.prestamo', form).classList.toggle('oculto', e.estado !== 'prestada');
     pintar();
@@ -841,7 +899,6 @@ function abrirEditor(existente = null, compSugerido = null) {
     const b = ev.target.closest('[data-c]'); if (!b) return;
     form.color.value = b.dataset.c; sincronizar();
   });
-  $('#ajuste-reset', m).onclick = () => { form.ax.value = 0; form.ay.value = 0; form.as.value = 1; sincronizar(); };
   $('#usar-dibujo', m).onclick = () => { fotoUrl = null; blob = null; paleta = []; pintar(); };
   $('#quitar-fondo', m).onchange = ev => (quitarF = ev.target.checked);
 
@@ -886,7 +943,7 @@ function abrirEditor(existente = null, compSugerido = null) {
       prestado_a: e.estado === 'prestada' ? (f.get('prestado_a') || '').trim() || null : null,
       prestado_desde: e.estado === 'prestada' ? (existente?.prestado_desde || new Date().toISOString()) : null,
       precio: f.get('precio') ? Math.max(0, +f.get('precio')) : null, notas: (f.get('notas') || '').trim(),
-      ajuste: (e.ajuste.x || e.ajuste.y || e.ajuste.s !== 1) ? e.ajuste : null,
+      ajuste: Object.keys(AJUSTE_BASE).some(k => Math.abs((e.ajuste[k] ?? AJUSTE_BASE[k]) - AJUSTE_BASE[k]) > 0.001) ? e.ajuste : null,
       medidas: Object.keys(e.medidas).length ? e.medidas : null,
       imagen_url: fotoUrl && !blob ? fotoUrl : (blob ? undefined : null),
     };
@@ -906,7 +963,9 @@ function abrirEditor(existente = null, compSugerido = null) {
     } catch (ex) { $('#editor-error', m).textContent = ex.message; btn.disabled = false; btn.textContent = existente ? 'Guardar cambios' : 'Guardar prenda'; }
   };
   pintarMedidas();
+  pintarAjustes();
   pintar();
+  if (ajustar) setTimeout(() => { $('#ajuste', m)?.scrollIntoView({ block: 'center' }); $('#ajuste-sliders input', m)?.focus({ preventScroll: true }); }, 250);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1129,6 +1188,7 @@ const acciones = {
   filtro: b => { S.filtro = b.dataset.filtro; renderInterior(); },
   probar: b => probar(b.dataset.id, b),
   ficha: b => abrirFicha(b.dataset.id),
+  ajustar: b => abrirEditor(prenda(b.dataset.id), null, { ajustar: true }),
   rotar: b => rotar(b.dataset.zona, +b.dataset.dir),
   'quitar-zona': b => { delete S.outfit[b.dataset.zona]; S.razones = null; refrescarArmario(); },
   limpiar: () => { const prev = { ...S.outfit }; S.outfit = {}; S.razones = null; refrescarArmario(); toast('Maniquí vacío.', { accion: 'Deshacer', onAccion: () => { S.outfit = prev; refrescarArmario(); } }); },
@@ -1221,6 +1281,7 @@ document.addEventListener('change', e => {
 });
 matchMedia('(max-width: 899px)').addEventListener?.('change', () => { if (S.user && S.perfil?.completo) renderVista(); });
 
+iniciarFormas();
 boot().catch(err => {
   console.error(err);
   app().innerHTML = `<div class="error-fatal"><h1>Algo salió mal al abrir Percha</h1><p>${esc(err.message)}</p><button class="btn btn-primario" onclick="location.reload()">Volver a intentar</button></div>`;
