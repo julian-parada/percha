@@ -1,13 +1,13 @@
 import { CONFIG } from './config.js';
 import { crearStore } from './store.js';
 import {
-  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, MEDIDAS, cajaReal, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
+  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, medidasPara, cajaReal, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
   imagenDe, dibujoPrenda, maniquiSVG, prendasDemo, nombreColor, coloresDominantes, hexToHsl,
 } from './garments.js';
 import { obtenerClima, CIUDADES } from './weather.js';
 import { recomendar, evaluarOutfit } from './recommender.js';
 import { quitarFondo, prepararImagen, cargarImagen } from './images.js';
-import { CONTROLES_FORMA, formaDe, formaLista, deformar, PADDING, iniciarFormas } from './forma.js';
+import { formaDe, formaLista, deformar, medidasDeFoto, PADDING, iniciarFormas } from './forma.js';
 import { $, $$, esc, cop, hace, diasDesde, reduceMotion, esMovil, iniciales, I, toast, abrirModal, cerrarModal, confirmar } from './ui.js';
 
 // ─── Estado ─────────────────────────────────────────────────
@@ -441,7 +441,7 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
     const escala = `scale(${(a.s || 1) * (a.sx || 1)}, ${(a.s || 1) * (a.sy || 1)})`;
     // Forma por partes (cintura, bota, hombros…): la foto se deforma en un canvas con márgenes (PADDING)
     const src = imagenDe(p);
-    const forma = formaDe(a, z);
+    const forma = formaDe(p, z);
     const lista = forma ? formaLista(src, forma) : null;
     const P = forma ? PADDING : 1;
     const imgAttrs = forma && !lista
@@ -469,7 +469,7 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
 const FILAS = { cabeza: 8.5, torso: 29, capa: 43, piernas: 68, pies: 93 };
 
 // Ajuste de cada prenda en el maniquí (se guarda en prendas.ajuste)
-const AJUSTE_BASE = { x: 0, y: 0, s: 1, sx: 1, sy: 1, f0: 1, f1: 1, f2: 1, f3: 1 };
+const AJUSTE_BASE = { x: 0, y: 0, s: 1, sx: 1, sy: 1 };
 const AJUSTES_GENERALES = [
   { n: 'ax', k: 'x', label: 'Mover a los lados', min: -40, max: 40, step: 1 },
   { n: 'ay', k: 'y', label: 'Subir o bajar', min: -40, max: 40, step: 1 },
@@ -692,7 +692,7 @@ function abrirFicha(id) {
           <div><dt>Último uso</dt><dd>${hace(p.ultimo_uso)}</dd></div>
           ${p.precio ? `<div><dt>Precio</dt><dd>${cop(p.precio)}</dd></div>` : ''}
           ${cpu ? `<div><dt>Costo por uso</dt><dd>${cpu}</dd></div>` : ''}
-          ${(MEDIDAS[TIPOS[p.tipo]?.zona] || []).filter(d => p.medidas?.[d.k]).map(d => `<div><dt>${d.label}</dt><dd>${esc(p.medidas[d.k])}${d.texto ? '' : ' cm'}</dd></div>`).join('')}
+          ${medidasPara(p.tipo).filter(d => p.medidas?.[d.k]).map(d => `<div><dt>${d.label}</dt><dd>${esc(p.medidas[d.k])}${d.texto ? '' : ' cm'}</dd></div>`).join('')}
         </dl>
         ${p.notas ? `<p class="ficha-notas">${esc(p.notas)}</p>` : ''}
         <fieldset class="campo"><legend>Estado</legend>
@@ -825,13 +825,14 @@ function abrirEditor(existente = null, compSugerido = null, { ajustar = false } 
     $('#color-nombre', m).textContent = nombreColor(e.color);
     const z = TIPOS[e.tipo].zona;
     pintarManiqui(z, actual);
+    pintarMedidasFoto();
     $('#paleta', m).innerHTML = paleta.map(c => `<button type="button" class="paleta-color" style="background:${c}" data-c="${c}" aria-label="Usar ${nombreColor(c)}"></button>`).join('');
   };
   // Vista previa con el outfit puesto; espera a que la forma esté lista para no parpadear
   let turno = 0;
   const pintarManiqui = async (z, actual) => {
     const t = ++turno;
-    const fm = formaDe(actual.ajuste, z);
+    const fm = formaDe(actual, z);
     if (fm) { try { await deformar(imagenDe(actual), fm); } catch {} }
     if (t !== turno) return;
     const outfit = Object.fromEntries(Object.entries(S.outfit).filter(([oz, id]) => oz !== z && id !== actual.id && prenda(id)));
@@ -846,7 +847,6 @@ function abrirEditor(existente = null, compSugerido = null, { ajustar = false } 
     const grupos = [
       ['Posición', AJUSTES_GENERALES.slice(0, 2)],
       ['Tamaño', AJUSTES_GENERALES.slice(2)],
-      ['Forma por partes', (CONTROLES_FORMA[z] || []).map(c => ({ n: 'a' + c.k, k: c.k, label: c.label, min: 0.5, max: 1.5, step: 0.01, pct: true }))],
     ].filter(([, defs]) => defs.length);
     $('#ajuste-sliders', m).innerHTML = grupos.map(([t, defs]) => `<div class="ajuste-grupo"><p>${t}</p>${defs.map(d => `
       <label><span>${d.label}<output data-o="${d.n}">${verValor(d, e.ajuste[d.k] ?? AJUSTE_BASE[d.k])}</output></span>
@@ -857,27 +857,43 @@ function abrirEditor(existente = null, compSugerido = null, { ajustar = false } 
       sincronizar();
     };
   };
-  const defDe = n => AJUSTES_GENERALES.find(d => d.n === n) || { n, k: n.slice(1), pct: true };
-  let zonaMedidas = null;
+  const defDe = n => AJUSTES_GENERALES.find(d => d.n === n);
+  let tipoMedidas = null;
   const pintarMedidas = () => {
-    const z = TIPOS[e.tipo].zona;
-    if (z === zonaMedidas) return;              // solo se redibuja al cambiar de tipo de zona (no mientras escribes)
-    zonaMedidas = z;
-    const defs = MEDIDAS[z] || [];
+    const defs = medidasPara(e.tipo);
+    const firma = defs.map(d => d.k).join();
+    if (firma === tipoMedidas) return;              // solo se redibuja al cambiar de tipo de prenda (no mientras escribes)
+    tipoMedidas = firma;
     const caja = $('#medidas-campos', m);
     caja.classList.toggle('oculto', !defs.length);
-    caja.innerHTML = defs.length ? `<legend>Medidas reales${defs.some(d => !d.texto) ? ' (en cm, con la prenda acostada)' : ''}</legend>
-      <div class="campos-2">${defs.map(d => `<label class="campo"><span>${d.label}</span>
+    const cm = defs.some(d => !d.texto);
+    caja.innerHTML = defs.length ? `<legend>Medidas reales${cm ? ' en cm (prenda acostada)' : ''}</legend>
+      <div class="campos-medidas">${defs.map(d => `<label class="campo"><span>${d.label}</span>
         <input name="m_${d.k}" ${d.texto ? '' : 'type="number" inputmode="decimal" min="1" max="250" step="0.5"'} value="${esc(e.medidas[d.k] ?? '')}" placeholder="${d.texto ? '' : 'cm'}">
-        <small class="nota">${d.ayuda}</small></label>`).join('')}</div>
-      ${defs.some(d => d.escala) ? '<p class="nota">Con el largo, la prenda se ve en el maniquí a su tamaño real según tu altura.</p>' : ''}` : '';
+        <small class="nota">${d.ayuda}</small><small class="en-foto" data-foto="${d.k}"></small></label>`).join('')}</div>
+      ${cm ? '<p class="nota">Con el <b>largo</b> la prenda toma su tamaño real según tu altura, y con las demás medidas se ajusta su forma (cintura, bota, hombros…). Debajo de cada medida ves cuánto mide la prenda en la foto.</p>' : ''}` : '';
+  };
+  // Cuánto mide la prenda en la foto ahora mismo (para comparar con lo que escribiste)
+  let turnoFoto = 0;
+  const pintarMedidasFoto = async () => {
+    const t = ++turnoFoto;
+    const src = fotoUrl;
+    const largo = +e.medidas.largo;
+    const zona = TIPOS[e.tipo].zona;
+    $$('[data-foto]', m).forEach(el => (el.textContent = ''));
+    if (!src || !(largo > 0)) return;
+    try {
+      const med = await medidasDeFoto(src, zona, e.tipo, largo);
+      if (t !== turnoFoto) return;
+      for (const [k, v] of Object.entries(med)) { const el = m.querySelector(`[data-foto="${k}"]`); if (el) el.textContent = `En la foto: ~${v} cm`; }
+    } catch {}
   };
   const sincronizar = () => {
     const f = new FormData(form);
     e.tipo = f.get('tipo');
     pintarMedidas();
     e.medidas = {};
-    for (const d of (MEDIDAS[TIPOS[f.get('tipo')].zona] || [])) {
+    for (const d of medidasPara(f.get('tipo'))) {
       const v = (f.get('m_' + d.k) || '').toString().trim();
       if (v) e.medidas[d.k] = d.texto ? v : Math.min(250, Math.max(1, +v));
     }

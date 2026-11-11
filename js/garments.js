@@ -50,13 +50,33 @@ export const TIPOS = {
 
 // Medidas en cm que se piden según la zona de la prenda (medidas "en plano", con la prenda acostada).
 // "escala: true" = esa medida define el tamaño real de la foto en el maniquí.
+const M = (k, label, ayuda, extra = {}) => ({ k, label, ayuda, ...extra });
 export const MEDIDAS = {
-  torso:   [{ k: 'largo', label: 'Largo', ayuda: 'Del cuello al ruedo', escala: true }, { k: 'pecho', label: 'Pecho', ayuda: 'De axila a axila' }],
-  capa:    [{ k: 'largo', label: 'Largo', ayuda: 'Del cuello al ruedo', escala: true }, { k: 'pecho', label: 'Pecho', ayuda: 'De axila a axila' }],
-  piernas: [{ k: 'largo', label: 'Largo', ayuda: 'De la cintura a la bota', escala: true }, { k: 'cintura', label: 'Cintura', ayuda: 'De lado a lado, acostado' }],
-  cabeza:  [{ k: 'talla', label: 'Talla', ayuda: 'Ej: 7 1/4, S/M o ajustable', texto: true }],
-  pies:    [{ k: 'talla', label: 'Talla', ayuda: 'Talla colombiana, ej: 40', texto: true }],
+  torso: [
+    M('largo', 'Largo', 'Del cuello al ruedo', { escala: true }),
+    M('hombros', 'Hombros', 'De costura a costura'),
+    M('pecho', 'Pecho', 'De axila a axila'),
+    M('cintura', 'Cintura', 'A la altura del ombligo'),
+    M('ruedo', 'Ruedo', 'Ancho del borde de abajo'),
+  ],
+  piernas: [
+    M('largo', 'Largo', 'De la cintura a la bota', { escala: true }),
+    M('cintura', 'Cintura', 'De lado a lado, arriba'),
+    M('cadera', 'Cadera', 'De lado a lado, a la altura del tiro'),
+    M('rodilla', 'Rodilla', 'Ancho de una pierna'),
+    M('bota', 'Bota', 'Ancho de la boca de una pierna'),
+  ],
+  short: [
+    M('largo', 'Largo', 'De la cintura al borde', { escala: true }),
+    M('cintura', 'Cintura', 'De lado a lado, arriba'),
+    M('cadera', 'Cadera', 'De lado a lado, a la altura del tiro'),
+    M('bota', 'Bota', 'Ancho de la boca de una pierna'),
+  ],
+  cabeza: [M('talla', 'Talla', 'Ej: 7 1/4, S/M o ajustable', { texto: true })],
+  pies: [M('talla', 'Talla', 'Talla colombiana, ej: 40', { texto: true })],
 };
+MEDIDAS.capa = MEDIDAS.torso;
+export const medidasPara = tipo => tipo === 'short' ? MEDIDAS.short : (MEDIDAS[TIPOS[tipo]?.zona] || []);
 
 // Puntos del maniquí (viewBox 300×600): de la coronilla (y=30) al piso (y=563) hay 533 unidades = la altura de la persona.
 const ALTO_FIGURA = 533;
