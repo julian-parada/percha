@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { crearStore } from './store.js';
 import {
-  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
+  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, MEDIDAS, cajaReal, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
   imagenDe, dibujoPrenda, maniquiSVG, prendasDemo, nombreColor, coloresDominantes, hexToHsl,
 } from './garments.js';
 import { obtenerClima, CIUDADES } from './weather.js';
@@ -436,8 +436,15 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
   const slots = Object.entries(outfit).map(([z, pid]) => {
     const p = get(pid);
     if (!p || !ZONAS[z]) return '';
-    const [x, y, w, h] = ZONAS[z].box;
     const a = p.ajuste || {};
+    const real = cajaReal(z, p, perfil.altura);
+    if (real) {
+      // Tamaño real: la foto mide lo que dicen sus cm según tu altura; lo que pase del piso queda bajo los tenis
+      const pct = real.alto / real.h * 100;
+      return `<div class="slot slot-${z} real ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:0;top:${real.y / 6}%;width:100%;height:${real.h / 6}%;z-index:${ZONAS[z].z}">
+        <img src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="height:${pct}%;transform:translateX(-50%) translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
+    }
+    const [x, y, w, h] = ZONAS[z].box;
     const ajuste = z === 'piernas' ? (largo ? 'relleno' : 'arriba') : '';
     return `<div class="slot slot-${z} ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:${x / 3}%;top:${y / 6}%;width:${w / 3}%;height:${h / 6}%;z-index:${ZONAS[z].z}">
       <img class="${ajuste}" src="${imagenDe(p)}" alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) scale(${a.s || 1})" draggable="false"></div>`;
@@ -661,6 +668,7 @@ function abrirFicha(id) {
           <div><dt>Último uso</dt><dd>${hace(p.ultimo_uso)}</dd></div>
           ${p.precio ? `<div><dt>Precio</dt><dd>${cop(p.precio)}</dd></div>` : ''}
           ${cpu ? `<div><dt>Costo por uso</dt><dd>${cpu}</dd></div>` : ''}
+          ${(MEDIDAS[TIPOS[p.tipo]?.zona] || []).filter(d => p.medidas?.[d.k]).map(d => `<div><dt>${d.label}</dt><dd>${esc(p.medidas[d.k])}${d.texto ? '' : ' cm'}</dd></div>`).join('')}
         </dl>
         ${p.notas ? `<p class="ficha-notas">${esc(p.notas)}</p>` : ''}
         <fieldset class="campo"><legend>Estado</legend>
@@ -716,6 +724,7 @@ function abrirEditor(existente = null, compSugerido = null) {
     precio: '', notas: '', prestado_a: '', ajuste: { x: 0, y: 0, s: 1 }, ...existente,
   };
   e.ajuste = { x: 0, y: 0, s: 1, ...(existente?.ajuste || {}) };
+  e.medidas = { ...(existente?.medidas || {}) };
   let blob = null, fotoUrl = existente?.imagen_url || null, quitarF = true, procesando = false;
   let paleta = [];
   const grupos = Object.entries(COMPARTIMENTOS).map(([k, c]) =>
@@ -773,6 +782,7 @@ function abrirEditor(existente = null, compSugerido = null) {
             <div class="segmento">${Object.entries(ESTADOS).map(([k, s]) => `<label class="${e.estado === k ? 'activo' : ''}"><input type="radio" name="estado" value="${k}" ${e.estado === k ? 'checked' : ''}>${s.label}</label>`).join('')}</div>
           </fieldset>
           <label class="campo prestamo ${e.estado === 'prestada' ? '' : 'oculto'}"><span>¿A quién se la prestaste?</span><input name="prestado_a" value="${esc(e.prestado_a || '')}" placeholder="Nombre"></label>
+          <fieldset class="campo medidas" id="medidas-campos"></fieldset>
           <div class="campos-2">
             <label class="campo"><span>Precio (opcional)</span><input name="precio" type="number" inputmode="numeric" min="0" step="1000" value="${e.precio ?? ''}" placeholder="85000"></label>
             <label class="campo"><span>Notas</span><input name="notas" value="${esc(e.notas || '')}" placeholder="Talla M, regalo…"></label>
@@ -797,8 +807,29 @@ function abrirEditor(existente = null, compSugerido = null) {
     $('#ajuste-maniqui', m).innerHTML = maniquiHTML({ [z]: actual }, { mini: true });
     $('#paleta', m).innerHTML = paleta.map(c => `<button type="button" class="paleta-color" style="background:${c}" data-c="${c}" aria-label="Usar ${nombreColor(c)}"></button>`).join('');
   };
+  let zonaMedidas = null;
+  const pintarMedidas = () => {
+    const z = TIPOS[e.tipo].zona;
+    if (z === zonaMedidas) return;              // solo se redibuja al cambiar de tipo de zona (no mientras escribes)
+    zonaMedidas = z;
+    const defs = MEDIDAS[z] || [];
+    const caja = $('#medidas-campos', m);
+    caja.classList.toggle('oculto', !defs.length);
+    caja.innerHTML = defs.length ? `<legend>Medidas reales${defs.some(d => !d.texto) ? ' (en cm, con la prenda acostada)' : ''}</legend>
+      <div class="campos-2">${defs.map(d => `<label class="campo"><span>${d.label}</span>
+        <input name="m_${d.k}" ${d.texto ? '' : 'type="number" inputmode="decimal" min="1" max="250" step="0.5"'} value="${esc(e.medidas[d.k] ?? '')}" placeholder="${d.texto ? '' : 'cm'}">
+        <small class="nota">${d.ayuda}</small></label>`).join('')}</div>
+      ${defs.some(d => d.escala) ? '<p class="nota">Con el largo, la prenda se ve en el maniquí a su tamaño real según tu altura.</p>' : ''}` : '';
+  };
   const sincronizar = () => {
     const f = new FormData(form);
+    e.tipo = f.get('tipo');
+    pintarMedidas();
+    e.medidas = {};
+    for (const d of (MEDIDAS[TIPOS[f.get('tipo')].zona] || [])) {
+      const v = (f.get('m_' + d.k) || '').toString().trim();
+      if (v) e.medidas[d.k] = d.texto ? v : Math.min(250, Math.max(1, +v));
+    }
     e.tipo = f.get('tipo'); e.color = f.get('color'); e.formalidad = +f.get('formalidad'); e.clima = f.get('clima');
     e.estado = f.get('estado'); e.ajuste = { x: +f.get('ax'), y: +f.get('ay'), s: +f.get('as') };
     $$('.segmento label', form).forEach(l => l.classList.toggle('activo', !!l.querySelector('input:checked')));
@@ -856,6 +887,7 @@ function abrirEditor(existente = null, compSugerido = null) {
       prestado_desde: e.estado === 'prestada' ? (existente?.prestado_desde || new Date().toISOString()) : null,
       precio: f.get('precio') ? Math.max(0, +f.get('precio')) : null, notas: (f.get('notas') || '').trim(),
       ajuste: (e.ajuste.x || e.ajuste.y || e.ajuste.s !== 1) ? e.ajuste : null,
+      medidas: Object.keys(e.medidas).length ? e.medidas : null,
       imagen_url: fotoUrl && !blob ? fotoUrl : (blob ? undefined : null),
     };
     if (datos.imagen_url === undefined) delete datos.imagen_url;
@@ -873,6 +905,7 @@ function abrirEditor(existente = null, compSugerido = null) {
       toast(existente ? 'Cambios guardados.' : `${g.nombre} ya está en tu armario.`);
     } catch (ex) { $('#editor-error', m).textContent = ex.message; btn.disabled = false; btn.textContent = existente ? 'Guardar cambios' : 'Guardar prenda'; }
   };
+  pintarMedidas();
   pintar();
 }
 

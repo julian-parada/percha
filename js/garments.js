@@ -48,6 +48,31 @@ export const TIPOS = {
   reloj:     { label: 'Reloj',              zona: 'muneca',  comp: 'accesorios' },
 };
 
+// Medidas en cm que se piden según la zona de la prenda (medidas "en plano", con la prenda acostada).
+// "escala: true" = esa medida define el tamaño real de la foto en el maniquí.
+export const MEDIDAS = {
+  torso:   [{ k: 'largo', label: 'Largo', ayuda: 'Del cuello al ruedo', escala: true }, { k: 'pecho', label: 'Pecho', ayuda: 'De axila a axila' }],
+  capa:    [{ k: 'largo', label: 'Largo', ayuda: 'Del cuello al ruedo', escala: true }, { k: 'pecho', label: 'Pecho', ayuda: 'De axila a axila' }],
+  piernas: [{ k: 'largo', label: 'Largo', ayuda: 'De la cintura a la bota', escala: true }, { k: 'cintura', label: 'Cintura', ayuda: 'De lado a lado, acostado' }],
+  cabeza:  [{ k: 'talla', label: 'Talla', ayuda: 'Ej: 7 1/4, S/M o ajustable', texto: true }],
+  pies:    [{ k: 'talla', label: 'Talla', ayuda: 'Talla colombiana, ej: 40', texto: true }],
+};
+
+// Puntos del maniquí (viewBox 300×600): de la coronilla (y=30) al piso (y=563) hay 533 unidades = la altura de la persona.
+const ALTO_FIGURA = 533;
+const ANCLA = { torso: 116, capa: 110, piernas: 286 };   // dónde empieza cada prenda: cuello, cuello (encima), cintura
+const PISO = 574;                                       // más abajo de esto la bota queda escondida bajo los tenis
+
+// Si la prenda tiene foto y largo en cm, devuelve su caja a tamaño real; si no, null (se usa la zona normal)
+export function cajaReal(zona, prenda, alturaCm) {
+  const largo = +prenda?.medidas?.largo;
+  if (!prenda?.imagen_url || !largo || !(zona in ANCLA)) return null;
+  const k = ALTO_FIGURA / (+alturaCm || 170);            // unidades por cm
+  const y = ANCLA[zona], alto = largo * k;
+  const visible = zona === 'piernas' ? Math.min(alto, PISO - y) : alto;
+  return { x: 0, y, w: 300, h: visible, alto };
+}
+
 export const ESTADOS = {
   disponible: { label: 'Disponible' },
   sucia:      { label: 'Sucia' },

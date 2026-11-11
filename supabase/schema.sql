@@ -55,8 +55,11 @@ create table if not exists public.prendas (
   imagen_url     text,
   imagen_ruta    text,
   ajuste         jsonb,
+  medidas        jsonb,          -- { "largo": 70, "pecho": 55, "cintura": 40, "talla": "M" } en cm
   created_at     timestamptz default now()
 );
+-- Si la tabla ya existía:
+alter table public.prendas add column if not exists medidas jsonb;
 create index if not exists prendas_user_idx on public.prendas (user_id);
 
 -- ─── Outfits guardados ──────────────────────────────────────
