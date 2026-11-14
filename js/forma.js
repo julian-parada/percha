@@ -184,6 +184,54 @@ export function deformar(src, f) {
   return p;
 }
 
+// ─── Tu foto como maniquí: borrar solo las piernas (no las manos) cuando hay pantalón largo ───
+const cuerpos = new Map(), cuerposPend = new Map();
+const claveCuerpo = (src, cal, conPies) => `${src.length}:${src.slice(-60)}|${cal.cintura}|${cal.piso}|${cal.cx}|${conPies}`;
+export function cuerpoListo(src, cal, conPies) { return cuerpos.get(claveCuerpo(src, cal, conPies)) || null; }
+
+export function recortarPiernas(src, cal, conPies) {
+  const clave = claveCuerpo(src, cal, conPies);
+  if (cuerpos.has(clave)) return Promise.resolve(cuerpos.get(clave));
+  if (cuerposPend.has(clave)) return cuerposPend.get(clave);
+  const p = cargar(src).then(img => {
+    const esc = Math.min(1, 1000 / img.naturalHeight);
+    const W = Math.round(img.naturalWidth * esc), H = Math.round(img.naturalHeight * esc);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, H);
+    const b = { W, H, alpha: ctx.getImageData(0, 0, W, H).data };
+    const alto = cal.piso - cal.cintura;
+    const yA = Math.round((cal.cintura + 0.035) * H);
+    const yPies = Math.round((cal.piso - 0.05) * H);
+    const yB = conPies ? H : yPies;
+    // Franja de las piernas: de la rodilla al tobillo solo hay piernas (las manos quedan más arriba)
+    let x0 = W, x1 = 0;
+    for (let y = Math.round((cal.cintura + alto * 0.6) * H); y < yPies; y += 2) {
+      for (const [a, z] of tramos(b, y)) { if (a < x0) x0 = a; if (z > x1) x1 = z; }
+    }
+    if (x1 <= x0) { const cx = (cal.cx ?? 0.5) * W; x0 = cx - W * 0.2; x1 = cx + W * 0.2; }
+    for (let y = yA; y < yB && y < H; y++) {
+      for (const [a, z] of tramos(b, y)) {
+        const solape = Math.min(z, x1) - Math.max(a, x0);
+        // es pierna/cadera si cae (en buena parte) dentro de la franja; las manos quedan por fuera
+        if (solape > (z - a) * 0.35) ctx.clearRect(a - 2, y, z - a + 5, 1);
+      }
+    }
+    const url = c.toDataURL('image/webp', 0.92);
+    cuerpos.set(clave, url);
+    if (cuerpos.size > 6) cuerpos.delete(cuerpos.keys().next().value);
+    return url;
+  }).finally(() => cuerposPend.delete(clave));
+  cuerposPend.set(clave, p);
+  return p;
+}
+function procesarCuerpo(img) {
+  if (img.dataset.cuerpoHecho) return;
+  img.dataset.cuerpoHecho = '1';
+  let d; try { d = JSON.parse(img.dataset.cuerpo); } catch { return; }
+  recortarPiernas(img.getAttribute('src'), d.cal, d.conPies).then(url => { img.src = url; img.style.clipPath = ''; }).catch(() => {});
+}
+
 function procesar(img) {
   if (img.dataset.formaHecha) return;
   img.dataset.formaHecha = '1';
@@ -193,11 +241,14 @@ function procesar(img) {
     .catch(() => { img.src = img.dataset.src; img.classList.remove('deformando'); });
 }
 export function iniciarFormas() {
-  const revisar = raiz => raiz.querySelectorAll?.('img[data-forma]:not([data-forma-hecha])').forEach(procesar);
+  const revisar = raiz => {
+    raiz.querySelectorAll?.('img[data-forma]:not([data-forma-hecha])').forEach(procesar);
+    raiz.querySelectorAll?.('img[data-cuerpo]:not([data-cuerpo-hecho])').forEach(procesarCuerpo);
+  };
   new MutationObserver(muts => {
     for (const m of muts) for (const n of m.addedNodes) {
       if (n.nodeType !== 1) continue;
-      if (n.matches?.('img[data-forma]')) procesar(n); else revisar(n);
+      if (n.matches?.('img[data-forma]')) procesar(n); else if (n.matches?.('img[data-cuerpo]')) procesarCuerpo(n); else revisar(n);
     }
   }).observe(document.body, { childList: true, subtree: true });
   revisar(document);

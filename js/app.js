@@ -7,7 +7,7 @@ import {
 import { obtenerClima, CIUDADES } from './weather.js';
 import { recomendar, evaluarOutfit } from './recommender.js';
 import { quitarFondo, prepararImagen, cargarImagen } from './images.js';
-import { formaDe, formaLista, deformar, medidasDeFoto, PADDING, iniciarFormas } from './forma.js';
+import { formaDe, formaLista, deformar, medidasDeFoto, PADDING, iniciarFormas, cuerpoListo } from './forma.js';
 import { $, $$, esc, cop, hace, diasDesde, reduceMotion, esMovil, iniciales, I, toast, abrirModal, cerrarModal, confirmar } from './ui.js';
 
 // ─── Estado ─────────────────────────────────────────────────
@@ -467,12 +467,21 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
       <img class="${ajuste} ${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
   }).join('');
   if (fc) {
-    // Con pantalón largo se recortan tus piernas de la foto (quedan solo torso y pies) para que no se asomen
+    // Con pantalón largo se borran de tu foto solo las piernas (y los pies si llevas zapatos); brazos y manos se quedan
     const c = perfil.foto_cal;
-    const A = (c.cintura + 0.05) * 100, B = (c.piso - 0.05) * 100;
-    const clip = largo ? `clip-path:polygon(0 0,100% 0,100% ${A}%,0 ${A}%,0 ${B}%,100% ${B}%,100% 100%,0 100%);` : '';
+    let src = perfil.foto_url, extra = '', clip = '';
+    if (largo) {
+      const conPies = !!get(outfit.pies);
+      const listo = cuerpoListo(src, c, conPies);
+      if (listo) src = listo;
+      else {
+        extra = `data-cuerpo='${esc(JSON.stringify({ cal: { cintura: c.cintura, piso: c.piso, cx: c.cx }, conPies }))}'`;
+        const A = (c.cintura + 0.05) * 100, B = (c.piso - 0.05) * 100;   // recorte provisional mientras se procesa
+        clip = `clip-path:polygon(0 0,100% 0,100% ${A}%,0 ${A}%,0 ${B}%,100% ${B}%,100% 100%,0 100%);`;
+      }
+    }
     return `<div class="maniqui con-foto ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
-      <div class="maniqui-figura"><img class="maniqui-foto" src="${perfil.foto_url}" alt="" draggable="false" style="left:${fc.left / 3}%;top:${fc.top / 6}%;width:${fc.Wp / 3}%;height:${fc.Hp / 6}%;${clip}"><div class="slots">${slots}</div></div>
+      <div class="maniqui-figura"><img class="maniqui-foto" src="${src}" ${extra} alt="" draggable="false" style="left:${fc.left / 3}%;top:${fc.top / 6}%;width:${fc.Wp / 3}%;height:${fc.Hp / 6}%;${clip}"><div class="slots">${slots}</div></div>
     </div>`;
   }
   return `<div class="maniqui ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
