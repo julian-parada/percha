@@ -67,6 +67,7 @@ class LocalStore {
 
   async getPerfil() { return this._data().perfil; }
   async savePerfil(p) { const d = this._data(); d.perfil = { ...d.perfil, ...p }; this._save(d); return d.perfil; }
+  async subirFoto(blob) { return blobToDataUrl(blob); }
 
   async listPrendas() { return this._data().prendas; }
   async savePrenda(p) {
@@ -162,6 +163,7 @@ class SupabaseStore {
     this._err(error); return data;
   }
 
+  async subirFoto(blob) { return (await this._subir(blob)).url; }
   async _subir(blob) {
     const ext = blob.type === 'image/png' ? 'png' : 'webp';
     const ruta = `${this._uid}/${uid()}.${ext}`;

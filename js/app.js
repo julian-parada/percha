@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { crearStore } from './store.js';
 import {
-  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, medidasPara, cajaReal, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
+  ZONAS, ZONAS_ROTABLES, COMPARTIMENTOS, TIPOS, ESTADOS, medidasPara, cajaReal, fotoCuerpo, FORMALIDAD, CLIMAS, OCASIONES, TONOS_PIEL,
   imagenDe, dibujoPrenda, maniquiSVG, prendasDemo, nombreColor, coloresDominantes, hexToHsl,
 } from './garments.js';
 import { obtenerClima, CIUDADES } from './weather.js';
@@ -434,6 +434,9 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
   const pantalon = get(outfit.piernas);
   // Pantalón largo: se esconden las piernas del maniquí y la foto se estira de la cintura a los tobillos
   const largo = !!pantalon && pantalon.tipo !== 'short';
+  // Si el perfil tiene foto del cuerpo, reemplaza al dibujo y la ropa se ancla a su cuello y cintura
+  const fc = fotoCuerpo(perfil);
+  const DY = fc ? { torso: fc.dCuello, capa: fc.dCuello, cuello: fc.dCuello, piernas: fc.dCintura, muneca: fc.dCintura } : {};
   const slots = Object.entries(outfit).map(([z, pid]) => {
     const p = get(pid);
     if (!p || !ZONAS[z]) return '';
@@ -448,7 +451,8 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
       ? `src="${src}" data-src="${src}" data-forma='${esc(JSON.stringify(forma))}'`
       : `src="${lista || src}"`;
     const pendiente = forma && !lista ? 'deformando' : '';
-    const real = cajaReal(z, p, perfil.altura);
+    const dy = DY[z] || 0;
+    const real = cajaReal(z, p, perfil.altura, dy);
     if (real) {
       // Tamaño real: la foto mide lo que dicen sus cm según tu altura; lo que pase del piso queda bajo los tenis
       const pct = real.alto / real.h * 100;
@@ -456,11 +460,21 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
         <img class="${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="height:${pct}%;transform:translateX(-50%) translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
     }
     let [x, y, w, h] = ZONAS[z].box;
+    y += dy;
     if (P !== 1) { x -= w * (P - 1) / 2; w *= P; }      // el canvas deformado trae márgenes: se ensancha la caja igual
     const ajuste = z === 'piernas' ? (largo ? 'relleno' : 'arriba') : '';
     return `<div class="slot slot-${z} ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:${x / 3}%;top:${y / 6}%;width:${w / 3}%;height:${h / 6}%;z-index:${ZONAS[z].z}">
       <img class="${ajuste} ${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
   }).join('');
+  if (fc) {
+    // Con pantalón largo se recortan tus piernas de la foto (quedan solo torso y pies) para que no se asomen
+    const c = perfil.foto_cal;
+    const A = (c.cintura + 0.05) * 100, B = (c.piso - 0.05) * 100;
+    const clip = largo ? `clip-path:polygon(0 0,100% 0,100% ${A}%,0 ${A}%,0 ${B}%,100% ${B}%,100% 100%,0 100%);` : '';
+    return `<div class="maniqui con-foto ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
+      <div class="maniqui-figura"><img class="maniqui-foto" src="${perfil.foto_url}" alt="" draggable="false" style="left:${fc.left / 3}%;top:${fc.top / 6}%;width:${fc.Wp / 3}%;height:${fc.Hp / 6}%;${clip}"><div class="slots">${slots}</div></div>
+    </div>`;
+  }
   return `<div class="maniqui ${mini ? 'mini' : ''}" ${id ? `id="${id}"` : ''}>
     <div class="maniqui-figura" style="transform:scaleX(${k})">${maniquiSVG({ piel: perfil.piel, silueta: perfil.silueta, sinPiernas: largo })}<div class="slots">${slots}</div></div>
   </div>`;
@@ -1122,6 +1136,10 @@ function renderPerfil(v) {
         <p class="error" role="alert"></p>
         <div class="modal-pie"><button class="btn btn-primario">Guardar perfil</button></div>
       </form>
+      <section class="tarjeta perfil-cuerpo">
+        <h2>Tu cuerpo en el maniquí</h2>
+        <div id="cuerpo-zona"></div>
+      </section>
       <section class="tarjeta perfil-datos">
         <h2>Tus datos</h2>
         <p class="nota">${S.store.mode === 'local' ? 'Modo local: haz una copia antes de borrar el navegador o cambiar de celular.' : 'Tu armario está guardado en la nube.'}</p>
@@ -1137,11 +1155,91 @@ function renderPerfil(v) {
   const form = $('#f-perfil');
   form.addEventListener('input', () => {
     const f = new FormData(form);
-    const tmp = { ...p, silueta: f.get('silueta'), contextura: f.get('contextura'), piel: f.get('piel') || p.piel };
     $$('.swatch', form).forEach(el => el.classList.toggle('activo', !!el.querySelector('input:checked')));
-    $('#perfil-maniqui').outerHTML = maniquiHTML({}, { id: 'perfil-maniqui', perfil: tmp });
+    vistaPrevia();
     $('.perfil-preview .ob-medida').textContent = ((+f.get('altura') || 170) / 100).toFixed(2) + ' m';
   });
+
+  // ─── Foto del cuerpo como maniquí ───
+  const cuerpo = { url: p.foto_url || null, cal: p.foto_cal ? { ...p.foto_cal } : null, blob: null, sucio: false };
+  const LINEAS = [['cabeza', 'Cabeza (coronilla)'], ['cuello', 'Cuello (base)'], ['cintura', 'Cintura (donde va el pantalón)'], ['piso', 'Piso (planta del pie)']];
+  function vistaPrevia() {
+    const f = new FormData(form);
+    const tmp = { ...S.perfil, silueta: f.get('silueta'), contextura: f.get('contextura'), piel: f.get('piel') || p.piel, foto_url: cuerpo.url, foto_cal: cuerpo.cal };
+    const demo = Object.fromEntries(Object.entries(S.outfit).filter(([, id]) => prenda(id)));
+    $('#perfil-maniqui').outerHTML = maniquiHTML(cuerpo.url ? demo : {}, { id: 'perfil-maniqui', perfil: tmp });
+  }
+  const pintarCuerpo = () => {
+    const z = $('#cuerpo-zona');
+    if (!cuerpo.url) {
+      z.innerHTML = `<p class="nota">Sube una foto tuya de cuerpo entero y reemplaza al dibujo: la ropa se acomoda encima de ti.</p>
+        <ul class="tips-foto">
+          <li>De pie, de frente, con la cámara a la altura del pecho y todo el cuerpo dentro de la foto.</li>
+          <li>Brazos un poco separados del cuerpo y piernas rectas.</li>
+          <li>Ropa pegada al cuerpo (pantaloneta y camiseta ajustada o sin camiseta), para que no se asome bajo las prendas.</li>
+          <li>Pared lisa y buena luz.</li>
+        </ul>
+        <label class="btn btn-laton">${I.camara}<span>Subir mi foto</span><input type="file" accept="image/*" class="sr" id="cuerpo-input"></label>
+        <p class="nota" id="cuerpo-estado"></p>`;
+    } else {
+      const c = cuerpo.cal;
+      z.innerHTML = `<p class="nota">Mueve cada línea hasta su punto en tu cuerpo. Así la ropa cae en su lugar.</p>
+        <div class="calibrar">
+          <div class="calibrar-foto"><img src="${cuerpo.url}" alt="Tu foto">
+            ${LINEAS.map(([k]) => `<i class="linea l-${k}" data-l="${k}" style="top:${c[k] * 100}%"></i>`).join('')}
+            <i class="linea-v" data-l="cx" style="left:${c.cx * 100}%"></i></div>
+          <div class="ajuste-sliders">
+            ${LINEAS.map(([k, l]) => `<label class="cal-${k}"><span>${l}</span><input type="range" min="0" max="1" step="0.004" data-cal="${k}" value="${c[k]}"></label>`).join('')}
+            <label><span>Centro del cuerpo</span><input type="range" min="0.2" max="0.8" step="0.004" data-cal="cx" value="${c.cx}"></label>
+          </div>
+        </div>
+        <p class="error" id="cuerpo-error" role="alert"></p>
+        <div class="botonera-fila">
+          <button type="button" class="btn btn-primario" id="cuerpo-guardar">Guardar mi cuerpo</button>
+          <label class="btn">${I.camara}<span>Cambiar foto</span><input type="file" accept="image/*" class="sr" id="cuerpo-input"></label>
+          <button type="button" class="btn btn-fantasma peligro" id="cuerpo-quitar">Volver al dibujo</button>
+        </div>
+        <p class="nota" id="cuerpo-estado"></p>`;
+      $$('[data-cal]', z).forEach(i => i.oninput = () => {
+        cuerpo.cal[i.dataset.cal] = +i.value; cuerpo.sucio = true;
+        const l = z.querySelector(`[data-l="${i.dataset.cal}"]`);
+        if (i.dataset.cal === 'cx') l.style.left = i.value * 100 + '%'; else l.style.top = i.value * 100 + '%';
+        vistaPrevia();
+      });
+      $('#cuerpo-guardar').onclick = async ev => {
+        const c2 = cuerpo.cal, err = $('#cuerpo-error');
+        if (!(c2.cabeza < c2.cuello && c2.cuello < c2.cintura && c2.cintura < c2.piso)) return (err.textContent = 'Las líneas deben ir en orden: cabeza, cuello, cintura y piso.');
+        err.textContent = ''; ev.target.disabled = true; ev.target.textContent = 'Guardando…';
+        try {
+          if (cuerpo.blob) { cuerpo.url = await S.store.subirFoto(cuerpo.blob); cuerpo.blob = null; }
+          S.perfil = await S.store.savePerfil({ ...S.perfil, foto_url: cuerpo.url, foto_cal: cuerpo.cal });
+          cuerpo.sucio = false; toast('Listo: ahora el maniquí eres tú.');
+        } catch (ex) { err.textContent = /foto_/.test(ex.message) ? 'Falta agregar las columnas foto_url y foto_cal en Supabase (mira supabase/schema.sql).' : ex.message; }
+        ev.target.disabled = false; ev.target.textContent = 'Guardar mi cuerpo';
+      };
+      $('#cuerpo-quitar').onclick = async () => {
+        if (S.perfil.foto_url && !(await confirmar('Volver al dibujo', 'Se quita tu foto del maniquí.', { si: 'Quitar foto' }))) return;
+        cuerpo.url = null; cuerpo.cal = null; cuerpo.blob = null;
+        if (S.perfil.foto_url) S.perfil = await S.store.savePerfil({ ...S.perfil, foto_url: null, foto_cal: null });
+        pintarCuerpo(); vistaPrevia();
+      };
+    }
+    $('#cuerpo-input').onchange = async ev => {
+      const file = ev.target.files?.[0]; if (!file) return;
+      const est = $('#cuerpo-estado'); est.textContent = 'Quitando el fondo de tu foto… (la primera vez tarda un poco)';
+      let fuente = file, sinFondo = false;
+      try { fuente = await quitarFondo(file); sinFondo = true; }
+      catch { toast('No se pudo quitar el fondo. Se usa la foto original: tómala contra una pared lisa.', { ms: 6000 }); }
+      try {
+        const r = await prepararImagen(fuente, { max: 1100, recortar: sinFondo });
+        cuerpo.blob = r.blob; cuerpo.url = r.dataUrl; cuerpo.sucio = true;
+        const ar = r.img.naturalWidth / r.img.naturalHeight;
+        cuerpo.cal = sinFondo ? { cabeza: 0.004, cuello: 0.165, cintura: 0.48, piso: 0.985, cx: 0.5, ar } : { cabeza: 0.08, cuello: 0.22, cintura: 0.5, piso: 0.95, cx: 0.5, ar };
+        pintarCuerpo(); vistaPrevia();
+      } catch { est.textContent = 'No pudimos leer esa foto. Prueba con otra.'; }
+    };
+  };
+  pintarCuerpo();
   form.onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(form);
@@ -1154,7 +1252,7 @@ function renderPerfil(v) {
         datos.lat = +pos.coords.latitude.toFixed(3); datos.lon = +pos.coords.longitude.toFixed(3);
       } catch { form.querySelector('.error').textContent = 'No pudimos leer tu ubicación. Elige una ciudad de la lista.'; return; }
     }
-    S.perfil = await S.store.savePerfil({ ...p, ...datos });
+    S.perfil = await S.store.savePerfil({ ...S.perfil, ...datos });
     $('.avatar').textContent = iniciales(S.perfil.nombre); $('.avatar').style.setProperty('--piel', S.perfil.piel);
     await actualizarClima(true);
     toast('Perfil guardado.');

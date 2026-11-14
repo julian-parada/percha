@@ -400,9 +400,26 @@ input[type=range] { width: 100%; accent-color: var(--laca); }
 .historial .fila-thumbs .mini-prenda { width: 44px; height: 44px; }
 
 .perfil-grid { display: grid; grid-template-columns: 260px 1fr 320px; gap: 20px; align-items: start; }
+.perfil-cuerpo { grid-column: 2 / -1; }
 .perfil-preview { position: sticky; top: 90px; height: 520px; padding: 20px 0; background: var(--laca); border-radius: 20px; display: grid; grid-template-rows: 1fr auto; }
 .perfil-preview .maniqui { color: var(--papel); }
 .perfil-datos { display: grid; gap: 12px; }
+.perfil-cuerpo { display: grid; gap: 12px; }
+.perfil-cuerpo h2 { font-size: 15px; }
+#cuerpo-zona { display: grid; gap: 12px; justify-items: start; }
+.tips-foto { margin: 0; padding-left: 20px; font-size: 14px; display: grid; gap: 4px; color: var(--gris); }
+.calibrar { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: center; width: 100%; }
+.calibrar-foto { position: relative; background: repeating-conic-gradient(#ECEDE6 0 25%, #F8F8F4 0 50%) 0 0 / 18px 18px; border-radius: 10px; overflow: hidden; }
+.calibrar-foto img { display: block; width: 100%; }
+.calibrar-foto .linea { position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; }
+.calibrar-foto .linea-v { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed rgba(20, 32, 28, .55); margin-left: -1px; }
+.l-cabeza, .cal-cabeza input { background: #D03A3A; accent-color: #D03A3A; }
+.l-cuello, .cal-cuello input { background: #2E7BD6; accent-color: #2E7BD6; }
+.l-cintura, .cal-cintura input { background: #C99A3B; accent-color: #C99A3B; }
+.l-piso, .cal-piso input { background: #2F7D5B; accent-color: #2F7D5B; }
+.ajuste-sliders label input[type=range] { background: none; }
+.botonera-fila { display: flex; flex-wrap: wrap; gap: 8px; }
+.maniqui-foto { position: absolute; max-width: none; object-fit: fill; user-select: none; pointer-events: none; }
 .perfil-datos h2 { font-size: 15px; }
 .botonera { display: grid; gap: 8px; }
 .botonera .btn { justify-content: flex-start; }
@@ -540,7 +557,7 @@ input[type=range] { width: 100%; accent-color: var(--laca); }
 @media (max-width: 1180px) {
   .armario-panel { padding: 0 42px; }
   .perfil-grid { grid-template-columns: 220px 1fr; }
-  .perfil-datos { grid-column: 1 / -1; }
+  .perfil-datos, .perfil-cuerpo { grid-column: 1 / -1; }
 }
 @media (max-width: 899px) {
   .topbar { padding: 0 14px; gap: 10px; height: 58px; }

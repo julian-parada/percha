@@ -22,6 +22,10 @@ create table if not exists public.perfiles (
   updated_at      timestamptz default now()
 );
 
+-- Foto del cuerpo como maniquí (si la tabla ya existía, estas líneas agregan las columnas)
+alter table public.perfiles add column if not exists foto_url text;
+alter table public.perfiles add column if not exists foto_cal jsonb;
+
 -- Crea el perfil automáticamente al registrarse
 create or replace function public.crear_perfil()
 returns trigger language plpgsql security definer set search_path = public as $$

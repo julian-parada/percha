@@ -78,17 +78,28 @@ export const MEDIDAS = {
 MEDIDAS.capa = MEDIDAS.torso;
 export const medidasPara = tipo => tipo === 'short' ? MEDIDAS.short : (MEDIDAS[TIPOS[tipo]?.zona] || []);
 
+// Tu foto como maniquí: se escala para que la cabeza quede en y=30 y el piso en y=563, igual que el dibujo.
+// cal = { cabeza, cuello, cintura, piso } como fracción del alto de la foto, cx = centro del cuerpo (fracción del ancho), ar = ancho/alto
+export function fotoCuerpo(perfil) {
+  const c = perfil?.foto_cal;
+  if (!perfil?.foto_url || !c) return null;
+  const Hp = 533 / Math.max(0.2, c.piso - c.cabeza);
+  const Wp = Hp * (c.ar || 0.4);
+  const top = 30 - c.cabeza * Hp, left = 150 - (c.cx ?? 0.5) * Wp;
+  return { top, left, Wp, Hp, dCuello: top + c.cuello * Hp - 116, dCintura: top + c.cintura * Hp - 286 };
+}
+
 // Puntos del maniquí (viewBox 300×600): de la coronilla (y=30) al piso (y=563) hay 533 unidades = la altura de la persona.
 const ALTO_FIGURA = 533;
 const ANCLA = { torso: 116, capa: 110, piernas: 286 };   // dónde empieza cada prenda: cuello, cuello (encima), cintura
 const PISO = 574;                                       // más abajo de esto la bota queda escondida bajo los tenis
 
 // Si la prenda tiene foto y largo en cm, devuelve su caja a tamaño real; si no, null (se usa la zona normal)
-export function cajaReal(zona, prenda, alturaCm) {
+export function cajaReal(zona, prenda, alturaCm, dy = 0) {
   const largo = +prenda?.medidas?.largo;
   if (!prenda?.imagen_url || !largo || !(zona in ANCLA)) return null;
   const k = ALTO_FIGURA / (+alturaCm || 170);            // unidades por cm
-  const y = ANCLA[zona], alto = largo * k;
+  const y = ANCLA[zona] + dy, alto = largo * k;          // dy: corrección cuando el maniquí es tu foto
   const visible = zona === 'piernas' ? Math.min(alto, PISO - y) : alto;
   return { x: 0, y, w: 300, h: visible, alto };
 }
