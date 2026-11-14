@@ -1169,6 +1169,31 @@ function renderPerfil(v) {
     const demo = Object.fromEntries(Object.entries(S.outfit).filter(([, id]) => prenda(id)));
     $('#perfil-maniqui').outerHTML = maniquiHTML(cuerpo.url ? demo : {}, { id: 'perfil-maniqui', perfil: tmp });
   }
+  // Guarda foto + calibración. Se llama sola al subir la foto, al soltar una línea y con "Guardar perfil".
+  let guardando = Promise.resolve();
+  const guardarCuerpo = (avisar = false) => (guardando = guardando.then(async () => {
+    if (!cuerpo.url || !cuerpo.sucio) return true;
+    const c2 = cuerpo.cal, err = $('#cuerpo-error'), est = $('#cuerpo-estado');
+    if (!(c2.cabeza < c2.cuello && c2.cuello < c2.cintura && c2.cintura < c2.piso)) { if (err) err.textContent = 'Las líneas deben ir en orden: cabeza, cuello, cintura y piso.'; return false; }
+    if (err) err.textContent = '';
+    if (est) est.textContent = 'Guardando…';
+    try {
+      if (cuerpo.blob) { const url = await S.store.subirFoto(cuerpo.blob); cuerpo.url = url; cuerpo.blob = null; }
+      S.perfil = await S.store.savePerfil({ ...S.perfil, foto_url: cuerpo.url, foto_cal: cuerpo.cal });
+      cuerpo.sucio = false;
+      if (est) est.textContent = 'Guardado ✓';
+      if (avisar) toast('Listo: ahora el maniquí eres tú.');
+      return true;
+    } catch (ex) {
+      console.error('No se pudo guardar la foto del cuerpo', ex);
+      const msg = /foto_|schema cache|column/i.test(ex.message)
+        ? 'Falta crear las columnas en Supabase. En SQL Editor ejecuta: alter table public.perfiles add column if not exists foto_url text; alter table public.perfiles add column if not exists foto_cal jsonb;'
+        : 'No se pudo guardar: ' + ex.message;
+      if (err) err.textContent = msg;
+      if (est) est.textContent = '';
+      return false;
+    }
+  }));
   const pintarCuerpo = () => {
     const z = $('#cuerpo-zona');
     if (!cuerpo.url) {
@@ -1206,16 +1231,11 @@ function renderPerfil(v) {
         if (i.dataset.cal === 'cx') l.style.left = i.value * 100 + '%'; else l.style.top = i.value * 100 + '%';
         vistaPrevia();
       });
+      $$('[data-cal]', z).forEach(i => i.onchange = () => guardarCuerpo());
       $('#cuerpo-guardar').onclick = async ev => {
-        const c2 = cuerpo.cal, err = $('#cuerpo-error');
-        if (!(c2.cabeza < c2.cuello && c2.cuello < c2.cintura && c2.cintura < c2.piso)) return (err.textContent = 'Las líneas deben ir en orden: cabeza, cuello, cintura y piso.');
-        err.textContent = ''; ev.target.disabled = true; ev.target.textContent = 'Guardando…';
-        try {
-          if (cuerpo.blob) { cuerpo.url = await S.store.subirFoto(cuerpo.blob); cuerpo.blob = null; }
-          S.perfil = await S.store.savePerfil({ ...S.perfil, foto_url: cuerpo.url, foto_cal: cuerpo.cal });
-          cuerpo.sucio = false; toast('Listo: ahora el maniquí eres tú.');
-        } catch (ex) { err.textContent = /foto_/.test(ex.message) ? 'Falta agregar las columnas foto_url y foto_cal en Supabase (mira supabase/schema.sql).' : ex.message; }
-        ev.target.disabled = false; ev.target.textContent = 'Guardar mi cuerpo';
+        cuerpo.sucio = true; ev.target.disabled = true;
+        await guardarCuerpo(true);
+        ev.target.disabled = false;
       };
       $('#cuerpo-quitar').onclick = async () => {
         if (S.perfil.foto_url && !(await confirmar('Volver al dibujo', 'Se quita tu foto del maniquí.', { si: 'Quitar foto' }))) return;
@@ -1236,6 +1256,7 @@ function renderPerfil(v) {
         const ar = r.img.naturalWidth / r.img.naturalHeight;
         cuerpo.cal = sinFondo ? { cabeza: 0.004, cuello: 0.165, cintura: 0.48, piso: 0.985, cx: 0.5, ar } : { cabeza: 0.08, cuello: 0.22, cintura: 0.5, piso: 0.95, cx: 0.5, ar };
         pintarCuerpo(); vistaPrevia();
+        guardarCuerpo(true);
       } catch { est.textContent = 'No pudimos leer esa foto. Prueba con otra.'; }
     };
   };
@@ -1252,6 +1273,7 @@ function renderPerfil(v) {
         datos.lat = +pos.coords.latitude.toFixed(3); datos.lon = +pos.coords.longitude.toFixed(3);
       } catch { form.querySelector('.error').textContent = 'No pudimos leer tu ubicación. Elige una ciudad de la lista.'; return; }
     }
+    await guardarCuerpo();
     S.perfil = await S.store.savePerfil({ ...S.perfil, ...datos });
     $('.avatar').textContent = iniciales(S.perfil.nombre); $('.avatar').style.setProperty('--piel', S.perfil.piel);
     await actualizarClima(true);
