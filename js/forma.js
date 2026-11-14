@@ -37,14 +37,21 @@ PUNTOS.capa = PUNTOS.torso;
 const puntosDe = (zona, tipo) => zona === 'piernas' && tipo === 'short' ? PUNTOS.short : PUNTOS[zona];
 
 // ¿La prenda necesita deformarse? Devuelve una especificación o null
+export const NORM_TORSO = 0.36;   // en las imágenes "normalizadas", el cuerpo de la prenda ocupa este ancho del lienzo
+
 export function formaDe(prenda, zona) {
   const m = prenda?.medidas || {};
   const pts = puntosDe(zona, prenda?.tipo);
-  if (!prenda?.imagen_url || !pts || !(+m.largo > 0)) return null;
+  if (!prenda?.imagen_url || !pts) return null;
+  const top = zona === 'torso' || zona === 'capa';
+  const largo = +m.largo > 0 ? +m.largo : 0;
   const cm = {};
-  for (const p of pts) if (+m[p.k] > 0) cm[p.k] = +m[p.k];
-  if (!Object.keys(cm).length) return null;
-  return { zona, tipo: prenda.tipo, largo: +m.largo, cm };
+  if (largo) for (const p of pts) if (+m[p.k] > 0) cm[p.k] = +m[p.k];
+  if (!top && !Object.keys(cm).length) return null;
+  const f = { zona, tipo: prenda.tipo, largo, cm };
+  // Prendas de arriba: siempre se recogen las mangas; sin medidas, se normalizan al ancho del torso
+  if (top) { f.mangas = 0.6; if (!largo) f.norm = 1; }
+  return f;
 }
 
 const listos = new Map();
@@ -52,7 +59,7 @@ const pendientes = new Map();
 const mediciones = new Map();
 
 export function claveForma(src, f) {
-  return `${src.length}:${src.slice(-60)}|${f.zona}|${f.tipo}|${f.largo}|${JSON.stringify(f.cm)}`;
+  return `${src.length}:${src.slice(-60)}|${JSON.stringify(f)}`;
 }
 export function formaLista(src, f) { return listos.get(claveForma(src, f)) || null; }
 
@@ -141,22 +148,30 @@ export async function medidasDeFoto(src, zona, tipo, largo) {
 
 function suave(u) { return u * u * (3 - 2 * u); }
 
+function tramoCentro(b, y) {
+  const ts = tramos(b, Math.min(b.H - 1, Math.max(0, y)));
+  if (!ts.length) return null;
+  const cx = b.W / 2;
+  return ts.find(([a, z]) => a <= cx && z >= cx) || ts.reduce((m, r) => Math.abs((r[0] + r[1]) / 2 - cx) < Math.abs((m[0] + m[1]) / 2 - cx) ? r : m);
+}
+
 export function deformar(src, f) {
   const clave = claveForma(src, f);
   if (listos.has(clave)) return Promise.resolve(listos.get(clave));
   if (pendientes.has(clave)) return pendientes.get(clave);
   const p = base(src).then(b => {
     const med = medir(b, f.zona, f.tipo);
-    const pxCm = b.H / f.largo;
-    // factores de ancho en cada punto medido
+    // 1) factores de ancho por altura, si hay medidas en cm
     const anclas = [];
-    for (const [k, objetivo] of Object.entries(f.cm)) {
-      const m = med[k]; if (!m) continue;
-      const actualCm = m.px / pxCm;
-      const deseadoCm = objetivo * (PROYECCION[k] || 1);
-      anclas.push({ t: m.t, s: Math.min(1.35, Math.max(0.6, deseadoCm / actualCm)) });   // límites: no deformar de más si la foto engaña
+    if (f.largo) {
+      const pxCm = b.H / f.largo;
+      for (const [k, objetivo] of Object.entries(f.cm || {})) {
+        const m = med[k]; if (!m) continue;
+        const deseado = objetivo * (PROYECCION[k] || 1);
+        anclas.push({ t: m.t, s: Math.min(1.35, Math.max(0.6, deseado / (m.px / pxCm))) });   // límites: no deformar de más si la foto engaña
+      }
+      anclas.sort((a, z) => a.t - z.t);
     }
-    anclas.sort((a, z) => a.t - z.t);
     const factor = t => {
       if (!anclas.length) return 1;
       if (t <= anclas[0].t) return anclas[0].s;
@@ -166,14 +181,22 @@ export function deformar(src, f) {
       }
       return anclas[anclas.length - 1].s;
     };
+    // 2) cuerpo de la prenda (sin mangas): lo que queda por fuera se recoge hacia el cuerpo
+    let c0 = 0, c1 = b.W;
+    const run = f.mangas && med.pecho ? tramoCentro(b, Math.round(med.pecho.t * (b.H - 1))) : null;
+    if (run) { c0 = run[0]; c1 = run[1]; }
+    const cuerpoPx = c1 - c0, k = run ? f.mangas : 1;
     const out = document.createElement('canvas');
-    out.width = Math.round(b.W * PADDING); out.height = b.H;
+    out.width = Math.round(f.norm && run ? cuerpoPx / NORM_TORSO : b.W * PADDING); out.height = b.H;
     const ctx = out.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
     const cx = out.width / 2;
     for (let y = 0; y < b.H; y++) {
-      const w = b.W * factor(b.H > 1 ? y / (b.H - 1) : 0);
-      ctx.drawImage(b.c, 0, y, b.W, 1, cx - w / 2, y, w, 1);
+      const s = factor(b.H > 1 ? y / (b.H - 1) : 0);
+      const wc = cuerpoPx * s, xi = cx - wc / 2;
+      ctx.drawImage(b.c, c0, y, cuerpoPx, 1, xi, y, wc, 1);
+      if (c0 > 0) { const w = c0 * s * k; ctx.drawImage(b.c, 0, y, c0, 1, xi - w, y, w + 0.6, 1); }
+      if (c1 < b.W) { const w = (b.W - c1) * s * k; ctx.drawImage(b.c, c1, y, b.W - c1, 1, xi + wc - 0.6, y, w + 0.6, 1); }
     }
     const url = out.toDataURL('image/webp', 0.92);
     listos.set(clave, url);
@@ -182,6 +205,17 @@ export function deformar(src, f) {
   }).finally(() => pendientes.delete(clave));
   pendientes.set(clave, p);
   return p;
+}
+
+// Ancho de tu torso en la foto (fracción del ancho), medido donde los brazos se separan del cuerpo
+export async function medirTorsoCuerpo(src, cal) {
+  const b = await base(src);
+  let min = 1;
+  for (let u = 0.45; u <= 0.95; u += 0.03) {
+    const r = tramoCentro(b, Math.round((cal.cuello + (cal.cintura - cal.cuello) * u) * b.H));
+    if (r) min = Math.min(min, (r[1] - r[0]) / b.W);
+  }
+  return +(Math.min(0.62, Math.max(0.3, min))).toFixed(3);
 }
 
 // ─── Tu foto como maniquí: borrar solo las piernas (no las manos) cuando hay pantalón largo ───
