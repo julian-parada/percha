@@ -7,7 +7,7 @@ import {
 import { obtenerClima, CIUDADES } from './weather.js';
 import { recomendar, evaluarOutfit } from './recommender.js';
 import { quitarFondo, prepararImagen, cargarImagen } from './images.js';
-import { formaDe, formaLista, deformar, medidasDeFoto, PADDING, iniciarFormas, cuerpoListo, medirTorsoCuerpo, NORM_TORSO } from './forma.js';
+import { formaDe, formaLista, deformar, medidasDeFoto, PADDING, iniciarFormas, cuerpoListo } from './forma.js';
 import { $, $$, esc, cop, hace, diasDesde, reduceMotion, esMovil, iniciales, I, toast, abrirModal, cerrarModal, confirmar } from './ui.js';
 
 // ─── Estado ─────────────────────────────────────────────────
@@ -47,14 +47,6 @@ async function cargarDatos() {
   const pr = leerProbador();
   S.outfit = Object.fromEntries(Object.entries(pr.outfit || {}).filter(([, id]) => prenda(id)));
   S.ocasion = pr.ocasion || 'universidad';
-  // Fotos de cuerpo guardadas antes: se mide el torso una vez
-  const fp = S.perfil;
-  if (fp?.foto_url && fp.foto_cal && !fp.foto_cal.torso) {
-    medirTorsoCuerpo(fp.foto_url, fp.foto_cal).then(t => {
-      fp.foto_cal.torso = t; S.store.savePerfil(fp).catch(() => {});
-      if ($('#vista') && S.vista === 'armario') renderProbador();
-    }).catch(() => {});
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -466,14 +458,6 @@ function maniquiHTML(outfit, { perfil = S.perfil || {}, id = '', mini = false, o
       const pct = real.alto / real.h * 100;
       return `<div class="slot slot-${z} real ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:0;top:${real.y / 6}%;width:100%;height:${real.h / 6}%;z-index:${ZONAS[z].z}">
         <img class="${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="height:${pct}%;transform:translateX(-50%) translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
-    }
-    if (forma?.norm) {
-      // Sin medidas: el cuerpo de la prenda se ajusta al ancho de tu torso (con holgura) y cuelga desde el cuello
-      const torsoU = fc ? (perfil.foto_cal.torso || 0.5) * fc.Wp : 106;
-      const wN = torsoU * (z === 'capa' ? 1.4 : 1.24) / NORM_TORSO;
-      const y0 = (z === 'capa' ? 108 : 114) + dy;
-      return `<div class="slot slot-${z} auto ${ocultar === z ? 'oculto' : ''}" data-zona="${z}" style="left:${(150 - wN / 2) / 3}%;top:${y0 / 6}%;width:${wN / 3}%;z-index:${ZONAS[z].z}">
-        <img class="${pendiente}" ${imgAttrs} alt="${esc(p.nombre)}" style="transform:translate(${a.x || 0}%,${a.y || 0}%) ${escala}" draggable="false"></div>`;
     }
     let [x, y, w, h] = ZONAS[z].box;
     y += dy;
@@ -1203,7 +1187,6 @@ function renderPerfil(v) {
     if (err) err.textContent = '';
     if (est) est.textContent = 'Guardando…';
     try {
-      try { cuerpo.cal.torso = await medirTorsoCuerpo(cuerpo.url, cuerpo.cal); } catch {}
       if (cuerpo.blob) { const url = await S.store.subirFoto(cuerpo.blob); cuerpo.url = url; cuerpo.blob = null; }
       S.perfil = await S.store.savePerfil({ ...S.perfil, foto_url: cuerpo.url, foto_cal: cuerpo.cal });
       cuerpo.sucio = false;
