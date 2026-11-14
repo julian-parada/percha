@@ -261,7 +261,7 @@ input[type=range] { width: 100%; accent-color: var(--laca); }
 .maniqui-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .slots { position: absolute; inset: 0; }
 .slot { position: absolute; }
-.slot img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; filter: drop-shadow(0 2px 2px rgba(20, 32, 28, .14)); }
+.slot img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; filter: drop-shadow(0 3px 3px rgba(20, 32, 28, .28)) drop-shadow(0 0 1px rgba(20, 32, 28, .25)); }
 .slot.oculto { opacity: 0; }
 .slot img.deformando { opacity: 0; }
 .slot img.relleno { object-fit: fill; }

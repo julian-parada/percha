@@ -349,32 +349,52 @@ export function imagenDe(prenda) {
 // ─── Maniquí ────────────────────────────────────────────────
 export const TONOS_PIEL = ['#F3D5BF', '#E4B894', '#C98E66', '#A86F4C', '#7E4E33', '#563624'];
 
-// sinPiernas: con pantalón largo puesto se esconden piernas y cadera, para que no se asomen entre las botas
+// Maniquí con anatomía: hombros, brazos y piernas con forma, manos, pies y sombreado.
+// Mantiene los mismos puntos de referencia (cuello y≈116, cintura y≈286, piso y≈563).
+// sinPiernas: con pantalón largo puesto se esconden piernas y cadera, para que no se asomen.
 export function maniquiSVG({ piel, silueta, sinPiernas = false } = {}) {
   piel = piel || TONOS_PIEL[2];
   silueta = silueta || 'masculina';
-  const borde = shade(piel, -0.14);
   const fem = silueta === 'femenina';
+  const borde = shade(piel, -0.16);
+  const luz = shade(piel, 0.07);
+  const som = 'rgba(40,20,10,.13)';
   const torso = fem
-    ? 'M106 124 Q150 116 194 124 L204 138 Q198 200 186 232 Q202 268 204 298 L96 298 Q98 268 114 232 Q102 200 96 138 Z'
-    : 'M100 124 Q150 116 200 124 L210 138 Q206 212 196 298 L104 298 Q94 212 90 138 Z';
-  const brazoL = fem ? 'M98 136 L86 214 L74 296' : 'M94 136 L82 214 L72 296';
-  const brazoR = fem ? 'M202 136 L214 214 L226 296' : 'M206 136 L218 214 L228 296';
+    ? 'M137 108 L163 108 C168 119 184 123 194 128 C202 132 204 142 202 152 C200 176 190 204 186 226 C186 250 198 268 200 292 L100 292 C102 268 114 250 114 226 C110 204 100 176 98 152 C96 142 98 132 106 128 C116 123 132 119 137 108 Z'
+    : 'M136 108 L164 108 C170 120 190 123 202 128 C211 132 213 143 211 153 L205 200 C201 232 196 256 197 292 L103 292 C104 256 99 232 95 200 L89 153 C87 143 89 132 98 128 C110 123 130 120 136 108 Z';
+  const dx = fem ? 6 : 0;   // hombros más angostos
+  const brazo = `<g transform="translate(${dx} 0)">
+      <path d="M91 131 C80 136 76 152 75 172 C74 190 70 204 68 218 C64 244 60 268 59 290 L77 293 C81 270 88 246 91 222 C95 204 103 186 106 168 C108 152 104 134 91 131 Z"/>
+      <path d="M59 288 C54 296 53 310 57 320 C60 327 67 329 72 325 C78 319 80 306 77 291 Z"/>
+      <path d="M78 150 C80 180 76 205 70 222 C66 246 62 268 60 289 L66 290 C70 266 78 240 82 220 C88 200 92 176 91 150 Z" fill="${luz}" stroke="none" opacity=".55"/>
+    </g>`;
+  const pierna = `<path d="M103 288 L150 288 L150 322 C149 356 146 392 144 422 C146 456 142 500 138 540 L119 540 C115 500 110 458 113 424 C108 380 103 334 103 288 Z"/>
+      <path d="M118 538 L139 538 C141 547 144 555 142 561 C134 565 114 565 108 561 C106 554 112 546 118 538 Z"/>
+      <path d="M150 300 C149 350 146 392 144 422 C146 456 142 500 138 540 L132 540 C136 500 139 458 137 424 C139 390 142 350 143 300 Z" fill="${som}" stroke="none"/>
+      <path d="M118 418 Q128 426 139 418" fill="none" opacity=".45"/>`;
   return `<svg class="maniqui-svg" viewBox="0 0 300 600" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <ellipse cx="150" cy="572" rx="92" ry="10" fill="currentColor" opacity=".08"/>
-    <g fill="${piel}" stroke="${borde}" stroke-width="1.2">
-      <path d="${brazoL}" fill="none" stroke="${piel}" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${brazoR}" fill="none" stroke="${piel}" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${fem ? 73 : 71}" cy="306" r="11"/>
-      <circle cx="${fem ? 227 : 229}" cy="306" r="11"/>
-      ${sinPiernas ? '' : `<path d="M128 300 L126 540" fill="none" stroke="${piel}" stroke-width="40" stroke-linecap="round"/>
-      <path d="M172 300 L174 540" fill="none" stroke="${piel}" stroke-width="40" stroke-linecap="round"/>
-      <path d="M104 288 L196 288 L194 330 L150 338 L106 330 Z"/>`}
-      <ellipse cx="124" cy="553" rx="22" ry="10"/>
-      <ellipse cx="176" cy="553" rx="22" ry="10"/>
+    <ellipse cx="150" cy="566" rx="78" ry="9" fill="#000" opacity=".1"/>
+    <g fill="${piel}" stroke="${borde}" stroke-width="1" stroke-linejoin="round">
+      ${brazo}
+      <g transform="translate(300 0) scale(-1 1)">${brazo}</g>
+      ${sinPiernas ? `<path d="M118 538 L139 538 C141 547 144 555 142 561 C134 565 114 565 108 561 C106 554 112 546 118 538 Z"/>
+        <g transform="translate(300 0) scale(-1 1)"><path d="M118 538 L139 538 C141 547 144 555 142 561 C134 565 114 565 108 561 C106 554 112 546 118 538 Z"/></g>`
+      : `${pierna}<g transform="translate(300 0) scale(-1 1)">${pierna}</g>`}
       <path d="${torso}"/>
-      <path d="M138 94 L162 94 L164 126 L136 126 Z"/>
-      <ellipse cx="150" cy="66" rx="30" ry="36"/>
+      <g stroke="none">
+        <path d="${fem ? 'M186 226 C186 250 198 268 200 292 L178 292 C178 262 172 240 174 200 C178 180 190 160 198 150 C198 176 190 204 186 226 Z' : 'M205 200 C201 232 196 256 197 292 L176 292 C176 256 180 226 184 196 C190 176 200 160 208 152 Z'}" fill="${som}"/>
+        <path d="M137 108 L163 108 C166 114 172 118 180 121 C168 126 132 126 120 121 C128 118 134 114 137 108 Z" fill="${som}"/>
+        <ellipse cx="150" cy="${fem ? 262 : 258}" rx="2" ry="3.2" fill="${borde}" opacity=".5"/>
+      </g>
+      <g fill="none" opacity=".4" stroke-linecap="round">
+        <path d="M122 132 Q136 138 147 135 M178 132 Q164 138 153 135"/>
+        ${fem ? '<path d="M118 178 Q132 190 148 180 M182 178 Q168 190 152 180"/>' : '<path d="M112 172 Q130 184 148 176 M188 172 Q170 184 152 176"/>'}
+      </g>
+      <path d="M139 86 L161 86 L163 112 C156 118 144 118 137 112 Z"/>
+      <path d="M139 96 Q150 106 161 96 L161 100 Q150 112 139 100 Z" fill="${som}" stroke="none"/>
+      <ellipse cx="122.5" cy="67" rx="4" ry="7"/><ellipse cx="177.5" cy="67" rx="4" ry="7"/>
+      <path d="M123 60 C123 40 135 30 150 30 C165 30 177 40 177 60 C177 80 166 99 150 99 C134 99 123 80 123 60 Z"/>
+      <path d="M166 36 C174 44 177 54 177 62 C177 80 166 99 150 99 C160 92 168 78 168 58 C168 48 167 42 166 36 Z" fill="${som}" stroke="none"/>
     </g>
   </svg>`;
 }
